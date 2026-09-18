@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ─── Enums ───────────────────────────────────────────────────────────────────
@@ -44,12 +44,29 @@ class BatterySpec(BaseModel):
     max_charge_kwh_per_hour: float = Field(..., ge=0)
     max_discharge_kwh_per_hour: float = Field(..., ge=0)
 
+    @model_validator(mode="after")
+    def valid_state(self):
+        if not (self.minimum_energy_kwh <= self.initial_energy_kwh <= self.capacity_kwh):
+            raise ValueError("initial_energy_kwh must be between minimum_energy_kwh and capacity_kwh.")
+        return self
+
 
 class OptimizationRequest(BaseModel):
     scenario_id: str
     operator_notes: List[str] = Field(..., min_length=1, max_length=3)
     hours: List[HourEntry] = Field(..., min_length=24, max_length=24)
     battery: BatterySpec
+
+    @model_validator(mode="after")
+    def valid_scenario(self):
+        if not self.scenario_id.strip():
+            raise ValueError("scenario_id cannot be blank.")
+        if any(not note.strip() for note in self.operator_notes):
+            raise ValueError("operator_notes cannot contain blank entries.")
+        if sorted(h.hour for h in self.hours) != list(range(24)):
+            raise ValueError("hours array must contain exactly 24 entries covering hours 0 through 23.")
+        self.hours = sorted(self.hours, key=lambda h: h.hour)
+        return self
 
 
 # ─── Structured Adjustment Models ───────────────────────────────────────────

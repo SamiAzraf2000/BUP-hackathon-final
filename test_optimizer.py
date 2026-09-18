@@ -41,7 +41,7 @@ def build_directives(expected_interp: list) -> list:
     return directives
 
 
-def test_sample(case: dict) -> bool:
+def run_sample(case: dict) -> bool:
     """Test a single sample case. Returns True if cost matches within tolerance."""
     case_id = case["id"]
     inp = case["input"]
@@ -122,7 +122,7 @@ def main():
     failed = 0
 
     for case in cases:
-        if test_sample(case):
+        if run_sample(case):
             passed += 1
         else:
             failed += 1

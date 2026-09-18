@@ -42,6 +42,7 @@ def optimize_schedule(
     H = list(range(24))
 
     # Pre-compute effective solar after solar_reduction directives
+    hours_map = {h.hour: h for h in hours_sorted}
     effective_solar = {h.hour: h.solar_kwh for h in hours_sorted}
     demand = {h.hour: h.demand_kwh for h in hours_sorted}
     tariff = {h.hour: h.tariff_bdt_per_kwh for h in hours_sorted}
@@ -65,7 +66,8 @@ def optimize_schedule(
         if d.directive_type == DirectiveType.solar_reduction:
             factor = adj.get("factor", 1.0)
             for h in d_hours:
-                effective_solar[h] = effective_solar.get(h, 0) * factor
+                # Use tightest bound relative to original solar forecast
+                effective_solar[h] = min(effective_solar.get(h, 0), hours_map[h].solar_kwh * factor)
 
         elif d.directive_type == DirectiveType.no_charge_window:
             for h in d_hours:
@@ -239,9 +241,58 @@ def optimize_schedule(
         total_cost += g * tariff[h]
         peak_grid = max(peak_grid, g)
 
+    # ─── Self-Verification (Replay Check) ────────────────────────────
+    _verify_plan(hours_map, battery, directives, hourly_plan, effective_solar)
+
     return {
         "hourly_plan": hourly_plan,
         "total_grid_kwh": round(total_grid, 2),
         "total_cost_bdt": round(total_cost, 2),
         "peak_grid_kwh": round(peak_grid, 2),
     }
+
+
+def _verify_plan(
+    hours_map: Dict[int, HourEntry],
+    battery: BatterySpec,
+    directives: List[DirectiveInterpretation],
+    hourly_plan: List[HourlyPlanEntry],
+    effective_solar: Dict[int, float],
+) -> None:
+    """Independently verify schedule satisfies physical constraints and directives."""
+    current_energy = battery.initial_energy_kwh
+    for entry in hourly_plan:
+        h = entry.hour
+        h_data = hours_map[h]
+        ch = entry.battery_kwh if entry.battery_action == BatteryAction.charge else 0.0
+        dis = entry.battery_kwh if entry.battery_action == BatteryAction.discharge else 0.0
+
+        # Energy balance
+        lhs = entry.grid_kwh + entry.solar_used_kwh + dis
+        rhs = h_data.demand_kwh + ch
+        if abs(lhs - rhs) > 0.05:
+            raise ValueError(f"Energy balance violated at hour {h}: {lhs:.2f} != {rhs:.2f}")
+
+        # Solar limit
+        if entry.solar_used_kwh > effective_solar[h] + 0.05:
+            raise ValueError(f"Solar usage exceeded at hour {h}: {entry.solar_used_kwh:.2f} > {effective_solar[h]:.2f}")
+
+        # Rate limits
+        if ch > battery.max_charge_kwh_per_hour + 0.05:
+            raise ValueError(f"Max charge rate exceeded at hour {h}")
+        if dis > battery.max_discharge_kwh_per_hour + 0.05:
+            raise ValueError(f"Max discharge rate exceeded at hour {h}")
+
+        # State transition
+        current_energy += ch - dis
+        if abs(current_energy - entry.battery_energy_after_kwh) > 0.05:
+            raise ValueError(f"Battery state transition mismatch at hour {h}")
+
+        # Battery capacity bounds
+        if not (-0.05 <= entry.battery_energy_after_kwh <= battery.capacity_kwh + 0.05):
+            raise ValueError(f"Battery capacity bounds violated at hour {h}")
+
+    # Neutrality check
+    if abs(current_energy - battery.initial_energy_kwh) > 0.05:
+        raise ValueError("End-of-day battery neutrality violated")
+

@@ -10,7 +10,12 @@ import os
 import traceback
 
 from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from llm_interpreter import interpret_notes
@@ -19,9 +24,6 @@ from models import (
     OptimizationResponse,
 )
 from optimizer import optimize_schedule
-
-# Load environment variables from .env file if present
-load_dotenv()
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -36,6 +38,21 @@ app = FastAPI(
     description="LLM-assisted 24-hour energy scheduling for the BUP CSE Fest 2026 Hackathon.",
     version="1.0.0",
 )
+
+
+from fastapi.encoders import jsonable_encoder
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Ensure malformed JSON or schema validation errors return HTTP 400 (Section 6.1)."""
+    logger.warning("Request validation failed: %s", exc)
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": "Request does not match the required scenario schema.",
+            "errors": jsonable_encoder(exc.errors()),
+        },
+    )
 
 
 # ─── Health Endpoint ─────────────────────────────────────────────────────────
@@ -134,8 +151,8 @@ async def optimize_energy(request: OptimizationRequest):
     except HTTPException:
         raise
     except ValueError as e:
-        logger.error("Optimization error: %s", e)
-        raise HTTPException(status_code=422, detail=str(e))
+        logger.error("Optimization or validation error: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Internal error: %s\n%s", e, traceback.format_exc())
         raise HTTPException(status_code=500, detail="Internal server error.")

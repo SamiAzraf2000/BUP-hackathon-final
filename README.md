@@ -160,6 +160,30 @@ curl -X POST http://localhost:8000/optimize-energy \
 
 ---
 
+## Automated Tests (Verification)
+
+The project includes an exhaustive test suite to verify the optimizer's constraints (using the 10 public sample cases) and to guarantee API reliability (checking the schema validation and safe LLM fallback).
+
+### Run Optimizer Tests
+
+This verifies the linear programming logic against the 10 public sample cases without making network calls to Gemini. It tests if the energy balance, rate limits, and battery constraints perfectly match the rubric.
+
+```bash
+python test_optimizer.py
+```
+**Expected Output:** `10/10 passed`
+
+### Run API & Integration Tests
+
+This runs `test_service.py` to ensure all invalid requests are properly handled as `400 Bad Request` and that the application safely falls back to a `no_op` if the Gemini API goes down.
+
+```bash
+pytest test_service.py -v
+```
+**Expected Output:** `3 passed` (Testing health, 400 validation handlers, and Safe LLM Fallback).
+
+---
+
 ## Docker Fallback
 
 ### Build
@@ -196,6 +220,8 @@ curl http://localhost:8000/health
 | `pulp` | Linear programming solver for cost minimization |
 | `google-generativeai` | Google Gemini API client for note interpretation |
 | `python-dotenv` | Environment variable management |
+| `pytest` | Testing framework |
+| `httpx` | Required by FastAPI for TestClient |
 
 ---
 
@@ -215,6 +241,8 @@ curl http://localhost:8000/health
 ├── models.py             # Pydantic request/response models
 ├── llm_interpreter.py    # Gemini LLM note interpretation + guardrails
 ├── optimizer.py          # PuLP LP optimizer
+├── test_optimizer.py     # LP exact constraint tests (10/10)
+├── test_service.py       # API safety and 400 validation tests
 ├── requirements.txt      # Python dependencies
 ├── Dockerfile            # Production Docker image
 ├── .env                  # Environment variables (not committed)
