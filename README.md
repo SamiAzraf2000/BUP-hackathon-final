@@ -14,7 +14,7 @@ Operator Notes (natural language)
         ▼
 ┌───────────────────┐
 │  Gemini LLM       │  Interprets notes → structured directives
-│  (gemini-2.0-flash)│
+│ (gemini-2.5-flash)│
 └────────┬──────────┘
          │
          ▼
@@ -35,7 +35,7 @@ Operator Notes (natural language)
 
 ## LLM Usage
 
-The Google Gemini API (`gemini-2.0-flash`) is used **exclusively for interpreting operator notes** into one of the six supported directive types (`solar_reduction`, `minimum_battery_reserve`, `no_charge_window`, `no_discharge_window`, `max_grid_window`, `no_op`).
+The Google Gemini API (`gemini-2.5-flash`) is used **exclusively for interpreting operator notes** into one of the six supported directive types (`solar_reduction`, `minimum_battery_reserve`, `no_charge_window`, `no_discharge_window`, `max_grid_window`, `no_op`).
 
 The LLM output is treated as untrusted data and passes through deterministic guardrails that validate:
 - Directive type is one of the six supported types
@@ -54,7 +54,31 @@ The LLM output is treated as untrusted data and passes through deterministic gua
 
 ---
 
-## Quick Start (Local)
+## Quick Start (For Judges)
+
+### 1. Test via Deployed API (Vercel)
+
+The easiest way to evaluate the solution is through our live Vercel deployment. 
+
+**Endpoint URL:** `https://bup-hackathon-final.vercel.app/optimize-energy`
+
+**Option A: Using Swagger UI (Interactive)**
+1. Navigate to: `https://bup-hackathon-final.vercel.app/docs`
+2. Expand the `POST /optimize-energy` route and click **Try it out**.
+3. Paste a valid public sample case (or hidden judge case) JSON into the **Request body**.
+4. Click **Execute** and observe the output in the response body.
+
+**Option B: Using cURL**
+You can instantly test the API against a JSON file using cURL (e.g. using `payload.json`):
+```bash
+curl -X POST "https://bup-hackathon-final.vercel.app/optimize-energy" \
+  -H "Content-Type: application/json" \
+  -d "@payload.json"
+```
+
+---
+
+## Local Development Setup
 
 ### Prerequisites
 - Python 3.10+
@@ -82,7 +106,7 @@ Create a `.env` file in the project root:
 
 ```env
 GEMINI_API_KEY=your-google-gemini-api-key-here
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
 LOG_LEVEL=INFO
 PORT=8000
 ```
@@ -90,7 +114,7 @@ PORT=8000
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | ✅ Yes | — | Google Gemini API key |
-| `GEMINI_MODEL` | No | `gemini-2.0-flash` | Gemini model to use |
+| `GEMINI_MODEL` | No | `gemini-2.5-flash` | Gemini model to use |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 | `PORT` | No | `8000` | Server port |
 
@@ -184,22 +208,26 @@ pytest test_service.py -v
 
 ---
 
-## Docker Fallback
+## Docker Fallback (For Judges)
 
-### Build
+As requested in the submission rubric, this repository automatically builds and publishes a public Docker image to the GitHub Container Registry (GHCR) using GitHub Actions.
 
-```bash
-docker build -t gridwise:latest .
-```
+**Submission Package Details:**
+- **Registry Image Reference:** `ghcr.io/samiazraf2000/bup-hackathon-final`
+- **Exact Tag:** `latest`
+- **Required Environment Variables:** `GEMINI_API_KEY`
+- **Exposed Port:** `8000`
 
-### Run
+### Verified Docker Run Command
+
+Run the following command in your terminal to easily pull and test the fallback Docker image:
 
 ```bash
 docker run -d \
   -p 8000:8000 \
-  -e GEMINI_API_KEY=your-key-here \
+  -e GEMINI_API_KEY="YOUR_GEMINI_API_KEY_HERE" \
   --name gridwise \
-  gridwise:latest
+  ghcr.io/samiazraf2000/bup-hackathon-final:latest
 ```
 
 ### Verify
